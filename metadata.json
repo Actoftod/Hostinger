@@ -1,0 +1,9 @@
+
+{
+  "name": "JERSEYSWAP.IO",
+  "description": "A high-performance jersey swapping application with real-time sports intelligence and AI design coaching.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
