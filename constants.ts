@@ -1,4 +1,3 @@
-
 import { Team, League } from './types';
 
 const BUCKET_BASE_URL = 'https://storage.googleapis.com/jerseyswap';

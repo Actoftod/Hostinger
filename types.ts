@@ -1,4 +1,3 @@
-
 export interface Team {
   id: string;
   name: string;
@@ -28,11 +27,20 @@ export interface SavedSwap {
   season: string;
 }
 
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt: string;
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
+}
+
 export interface UserProfile {
   id: string;
   name: string;
   email: string;
-  password?: string; // Simulated for local storage demo
+  password?: string;
   handle: string;
   role: 'Athlete' | 'Pro Designer' | 'Scout';
   leaguePreference: string;
@@ -45,6 +53,7 @@ export interface UserProfile {
   };
   ovr: number;
   vault: SavedSwap[];
+  achievements: Achievement[];
 }
 
 export interface SwapState {
