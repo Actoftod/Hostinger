@@ -20,6 +20,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["index.tsx", "App.tsx", "components/**/*", "services/**/*", "types.ts", "constants.ts", "vite.config.js"],
-  "exclude": ["node_modules", "dist", "src"]
+  "include": ["src/**/*", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
 }
