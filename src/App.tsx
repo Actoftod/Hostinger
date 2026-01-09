@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { AppStep, SwapState, UserProfile, SavedSwap, Achievement } from './types';
 import { TEAMS, LEAGUES } from './constants';
 import { GeminiService } from './services/geminiService';
@@ -46,6 +46,7 @@ const App: React.FC = () => {
   const [regData, setRegData] = useState({ name: '', email: '', handle: '', password: '' });
   const [authIdentifier, setAuthIdentifier] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
   
   const [state, setState] = useState<SwapState>({
     image: null,
@@ -63,6 +64,11 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const geminiService = useRef(new GeminiService());
+
+  // Memoize filtered teams for better performance
+  const filteredTeams = useMemo(() => {
+    return TEAMS.filter(t => t.leagueId === state.league?.id);
+  }, [state.league?.id]);
 
   useEffect(() => {
     const savedProfiles = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
@@ -128,20 +134,88 @@ const App: React.FC = () => {
     setStep('landing');
   };
 
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleSignIn = () => {
+    setAuthError('');
+
+    if (!authIdentifier.trim()) {
+      setAuthError('Email or handle required');
+      return;
+    }
+
+    if (!authPassword) {
+      setAuthError('Password required');
+      return;
+    }
+
     const input = authIdentifier.trim().toLowerCase();
-    const found = profiles.find(p => 
-      (p.handle.toLowerCase() === input || p.handle.toLowerCase() === `@${input}` || p.email.toLowerCase() === input) && 
+    const found = profiles.find(p =>
+      (p.handle.toLowerCase() === input || p.handle.toLowerCase() === `@${input}` || p.email.toLowerCase() === input) &&
       p.password === authPassword
     );
 
     if (found) {
       setActiveProfile(found);
       localStorage.setItem(SESSION_KEY, found.id);
+      setAuthError('');
       setStep('landing');
     } else {
-      alert("Neural credentials rejected.");
+      setAuthError('Invalid credentials. Please try again.');
     }
+  };
+
+  const handleSignUp = () => {
+    setAuthError('');
+
+    if (!regData.name.trim()) {
+      setAuthError('Full name required');
+      return;
+    }
+
+    if (!regData.email.trim()) {
+      setAuthError('Email required');
+      return;
+    }
+
+    if (!validateEmail(regData.email)) {
+      setAuthError('Invalid email format');
+      return;
+    }
+
+    if (!regData.handle.trim()) {
+      setAuthError('Handle required');
+      return;
+    }
+
+    if (!regData.password) {
+      setAuthError('Password required');
+      return;
+    }
+
+    if (regData.password.length < 6) {
+      setAuthError('Password must be at least 6 characters');
+      return;
+    }
+
+    // Check if email or handle already exists
+    const emailExists = profiles.some(p => p.email.toLowerCase() === regData.email.toLowerCase());
+    const handleExists = profiles.some(p => p.handle.toLowerCase() === regData.handle.toLowerCase() || p.handle.toLowerCase() === `@${regData.handle.toLowerCase()}`);
+
+    if (emailExists) {
+      setAuthError('Email already registered');
+      return;
+    }
+
+    if (handleExists) {
+      setAuthError('Handle already taken');
+      return;
+    }
+
+    setStep('onboarding');
   };
 
   const reset = useCallback(() => {
@@ -270,29 +344,39 @@ const App: React.FC = () => {
 
               {authMode === 'signin' && (
                 <motion.div key="signin" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                  {authError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                      <p className="font-oswald italic text-xs text-red-400 uppercase font-bold">{authError}</p>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     <div className="relative">
                       <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
-                      <input type="text" placeholder="EMAIL_OR_HANDLE" value={authIdentifier} onChange={e => setAuthIdentifier(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-6 font-oswald italic font-bold text-white outline-none focus:border-[#ccff00] transition-all" />
+                      <input type="text" placeholder="EMAIL_OR_HANDLE" value={authIdentifier} onChange={e => { setAuthIdentifier(e.target.value); setAuthError(''); }} onKeyPress={e => e.key === 'Enter' && handleSignIn()} className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-6 font-oswald italic font-bold text-white outline-none focus:border-[#ccff00] transition-all" />
                     </div>
                     <div className="relative">
                       <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-700" />
-                      <input type="password" placeholder="PASSWORD" value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-6 font-oswald italic font-bold text-white outline-none focus:border-[#ccff00] transition-all" />
+                      <input type="password" placeholder="PASSWORD" value={authPassword} onChange={e => { setAuthPassword(e.target.value); setAuthError(''); }} onKeyPress={e => e.key === 'Enter' && handleSignIn()} className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-6 font-oswald italic font-bold text-white outline-none focus:border-[#ccff00] transition-all" />
                     </div>
                   </div>
-                  <button onClick={handleSignIn} className="w-full py-5 bg-[#ccff00] text-black font-oswald italic font-black text-2xl rounded-2xl shadow-xl uppercase">COMMIT_SIGN_IN</button>
-                  <button onClick={() => setAuthMode('select')} className="w-full py-2 text-zinc-600 font-oswald italic text-[10px] uppercase font-black hover:text-white transition-colors tracking-widest">CANCEL</button>
+                  <button onClick={handleSignIn} className="w-full py-5 bg-[#ccff00] text-black font-oswald italic font-black text-2xl rounded-2xl shadow-xl uppercase hover:bg-[#b8e600] active:scale-[0.98] transition-all">COMMIT_SIGN_IN</button>
+                  <button onClick={() => { setAuthMode('select'); setAuthError(''); }} className="w-full py-2 text-zinc-600 font-oswald italic text-[10px] uppercase font-black hover:text-white transition-colors tracking-widest">CANCEL</button>
                 </motion.div>
               )}
 
               {authMode === 'signup' && (
                 <motion.div key="signup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3">
-                  <input type="text" placeholder="FULL_NAME" value={regData.name} onChange={e => setRegData({ ...regData, name: e.target.value.toUpperCase() })} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all uppercase font-bold" />
-                  <input type="email" placeholder="EMAIL" value={regData.email} onChange={e => setRegData({ ...regData, email: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all font-bold" />
-                  <input type="text" placeholder="@HANDLE" value={regData.handle} onChange={e => setRegData({ ...regData, handle: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all font-bold" />
-                  <input type="password" placeholder="PASSWORD" value={regData.password} onChange={e => setRegData({ ...regData, password: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all font-bold" />
-                  <button onClick={() => { if (!regData.name || !regData.email || !regData.handle) return alert('Incomplete ID'); setStep('onboarding'); }} className="w-full py-5 bg-white text-black font-oswald italic font-black text-2xl rounded-2xl shadow-xl mt-4 uppercase">INIT_ONBOARDING</button>
-                  <button onClick={() => setAuthMode('select')} className="w-full py-2 text-zinc-600 font-oswald italic text-[10px] uppercase font-black hover:text-white transition-colors tracking-widest">CANCEL</button>
+                  {authError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                      <p className="font-oswald italic text-xs text-red-400 uppercase font-bold">{authError}</p>
+                    </div>
+                  )}
+                  <input type="text" placeholder="FULL_NAME" value={regData.name} onChange={e => { setRegData({ ...regData, name: e.target.value.toUpperCase() }); setAuthError(''); }} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all uppercase font-bold" />
+                  <input type="email" placeholder="EMAIL" value={regData.email} onChange={e => { setRegData({ ...regData, email: e.target.value }); setAuthError(''); }} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all font-bold" />
+                  <input type="text" placeholder="@HANDLE" value={regData.handle} onChange={e => { setRegData({ ...regData, handle: e.target.value }); setAuthError(''); }} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all font-bold" />
+                  <input type="password" placeholder="PASSWORD (MIN 6 CHARS)" value={regData.password} onChange={e => { setRegData({ ...regData, password: e.target.value }); setAuthError(''); }} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-6 font-oswald italic text-white outline-none focus:border-[#ccff00] transition-all font-bold" />
+                  <button onClick={handleSignUp} className="w-full py-5 bg-white text-black font-oswald italic font-black text-2xl rounded-2xl shadow-xl mt-4 uppercase hover:bg-gray-200 active:scale-[0.98] transition-all">INIT_ONBOARDING</button>
+                  <button onClick={() => { setAuthMode('select'); setAuthError(''); }} className="w-full py-2 text-zinc-600 font-oswald italic text-[10px] uppercase font-black hover:text-white transition-colors tracking-widest">CANCEL</button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -304,13 +388,26 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center selection:bg-[#ccff00] selection:text-black">
-      <header className="fixed top-0 inset-x-0 z-[100] bg-black/50 backdrop-blur-2xl border-b border-white/5 px-4 md:px-8 py-2 flex items-center justify-between">
-        <div onClick={reset} className="flex items-center gap-3 cursor-pointer group">
-          <div className="w-6 h-6 bg-[#ccff00] rounded flex items-center justify-center group-hover:rotate-12 transition-all">
-            <Zap className="w-3.5 h-3.5 text-black fill-current" />
+      <header className="fixed top-0 inset-x-0 z-[100] bg-black/50 backdrop-blur-2xl border-b border-white/5 px-4 md:px-8 py-3 flex items-center justify-between">
+        <div onClick={reset} className="flex items-center gap-2 sm:gap-3 cursor-pointer group active:scale-95 transition-transform">
+          <div className="w-6 h-6 sm:w-7 sm:h-7 bg-[#ccff00] rounded flex items-center justify-center group-hover:rotate-12 transition-all">
+            <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black fill-current" />
           </div>
-          <span className="font-oswald italic font-black text-base tracking-tighter uppercase text-white">JERSEY<span className="text-[#ccff00]">SWAP</span>.IO</span>
+          <span className="font-oswald italic font-black text-sm sm:text-base tracking-tighter uppercase text-white">JERSEY<span className="text-[#ccff00]">SWAP</span>.IO</span>
         </div>
+
+        {/* Mobile profile quick access */}
+        {activeProfile && (
+          <button
+            onClick={() => setStep('profile')}
+            className="flex items-center gap-2 glass rounded-full px-3 py-1.5 border border-white/10 active:scale-95 transition-transform sm:hidden"
+          >
+            <div className="w-6 h-6 rounded-full overflow-hidden">
+              <img src={activeProfile.avatar || ''} className="w-full h-full object-cover" alt={activeProfile.name} />
+            </div>
+            <span className="font-oswald italic font-bold text-xs text-white">{activeProfile.handle}</span>
+          </button>
+        )}
       </header>
 
       <AnimatePresence>
@@ -328,42 +425,44 @@ const App: React.FC = () => {
       <main className="flex-1 w-full max-w-7xl pt-20 relative z-10 flex flex-col">
         <AnimatePresence mode="wait">
           {isPreparingPlate && (
-            <motion.div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-3xl flex flex-col items-center justify-center">
-              <Scan className="w-14 h-14 text-[#ccff00] animate-pulse" />
-              <h2 className="font-oswald italic font-black text-4xl text-[#ccff00] mt-10 uppercase tracking-ultra">ANALYZING_PLATE</h2>
+            <motion.div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-3xl flex flex-col items-center justify-center px-4">
+              <Scan className="w-12 h-12 sm:w-14 sm:h-14 text-[#ccff00] animate-pulse" />
+              <h2 className="font-oswald italic font-black text-2xl sm:text-3xl md:text-4xl text-[#ccff00] mt-8 sm:mt-10 uppercase tracking-ultra text-center">ANALYZING_PLATE</h2>
+              <p className="font-oswald italic text-xs sm:text-sm text-zinc-600 uppercase font-bold mt-4 text-center">Preparing your image...</p>
             </motion.div>
           )}
 
           {step === 'landing' && (
-            <div className="flex-1 flex flex-col items-center justify-center py-12 px-6">
-              <h1 className="font-oswald italic font-black text-[5rem] md:text-[10rem] leading-[0.8] uppercase tracking-ultra text-center mb-8">
+            <div className="flex-1 flex flex-col items-center justify-center py-8 sm:py-12 px-4 sm:px-6">
+              <h1 className="font-oswald italic font-black text-[3rem] sm:text-[5rem] md:text-[7rem] lg:text-[10rem] leading-[0.8] uppercase tracking-ultra text-center mb-6 sm:mb-8">
                 <KineticWord>CREATE</KineticWord><br /><KineticWord className="text-[#ccff00]">LEGACY.</KineticWord>
               </h1>
-              <div className="flex gap-4">
-                <button onClick={() => setStep('upload')} className="px-12 py-5 btn-stadium font-oswald italic font-black text-2xl rounded">START_DRAFT</button>
-                <button onClick={() => setStep('profile')} className="px-12 py-5 glass border border-white/10 text-white font-oswald italic font-black text-2xl rounded">OPEN_VAULT</button>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto px-4 sm:px-0">
+                <button onClick={() => setStep('upload')} className="px-8 sm:px-12 py-4 sm:py-5 btn-stadium font-oswald italic font-black text-lg sm:text-2xl rounded hover:scale-105 active:scale-95 transition-all">START_DRAFT</button>
+                <button onClick={() => setStep('profile')} className="px-8 sm:px-12 py-4 sm:py-5 glass border border-white/10 text-white font-oswald italic font-black text-lg sm:text-2xl rounded hover:bg-white/5 active:scale-95 transition-all">OPEN_VAULT</button>
               </div>
             </div>
           )}
 
           {step === 'upload' && (
-            <section className="flex-1 flex flex-col items-center justify-center space-y-10 py-12">
-              <div onClick={() => fileInputRef.current?.click()} className="w-full max-w-lg aspect-square glass rounded-[4rem] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-8 hover:border-[#ccff00]/40 transition-all group cursor-pointer" >
-                <Zap className="w-16 h-16 text-zinc-800 group-hover:text-[#ccff00]" />
-                <span className="font-oswald italic font-black text-5xl uppercase text-white group-hover:text-[#ccff00]">SOURCE_PLATE</span>
+            <section className="flex-1 flex flex-col items-center justify-center space-y-6 sm:space-y-10 py-8 sm:py-12 px-4">
+              <div onClick={() => fileInputRef.current?.click()} className="w-full max-w-lg aspect-square glass rounded-3xl sm:rounded-[4rem] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-6 sm:gap-8 hover:border-[#ccff00]/40 active:border-[#ccff00]/60 transition-all group cursor-pointer" >
+                <Zap className="w-12 h-12 sm:w-16 sm:h-16 text-zinc-800 group-hover:text-[#ccff00] transition-colors" />
+                <span className="font-oswald italic font-black text-3xl sm:text-4xl md:text-5xl uppercase text-white group-hover:text-[#ccff00] transition-colors px-4 text-center">SOURCE_PLATE</span>
+                <p className="font-oswald italic text-xs sm:text-sm text-zinc-600 uppercase font-bold">TAP TO UPLOAD IMAGE</p>
               </div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
             </section>
           )}
 
           {step === 'league-select' && (
-            <section className="flex-1 flex flex-col items-center justify-center py-12">
-              <h2 className="font-oswald italic font-black text-6xl uppercase mb-12">THE_ARENA</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-4xl px-6">
+            <section className="flex-1 flex flex-col items-center justify-center py-8 sm:py-12 px-4">
+              <h2 className="font-oswald italic font-black text-3xl sm:text-4xl md:text-6xl uppercase mb-8 sm:mb-12">THE_ARENA</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-4xl">
                 {LEAGUES.map(l => (
-                  <button key={l.id} onClick={() => { setState(p => ({ ...p, league: l })); setStep('customize'); }} className="aspect-[4/3] glass rounded-[2rem] border border-white/5 hover:border-[#ccff00]/60 transition-all group flex flex-col items-center justify-center p-6 gap-4" >
-                    <img src={l.logo} className="h-20 object-contain opacity-20 group-hover:opacity-100 transition-all" alt={l.name} />
-                    <span className="font-oswald italic text-xs tracking-widest text-zinc-500 group-hover:text-white uppercase font-black">{l.name}</span>
+                  <button key={l.id} onClick={() => { setState(p => ({ ...p, league: l })); setStep('customize'); }} className="aspect-[4/3] glass rounded-xl sm:rounded-[2rem] border border-white/5 hover:border-[#ccff00]/60 active:border-[#ccff00] active:scale-95 transition-all group flex flex-col items-center justify-center p-4 sm:p-6 gap-3 sm:gap-4" >
+                    <img src={l.logo} className="h-12 sm:h-16 md:h-20 object-contain opacity-20 group-hover:opacity-100 transition-all" alt={l.name} loading="lazy" />
+                    <span className="font-oswald italic text-[10px] sm:text-xs tracking-widest text-zinc-500 group-hover:text-white uppercase font-black">{l.name}</span>
                   </button>
                 ))}
               </div>
@@ -371,41 +470,42 @@ const App: React.FC = () => {
           )}
 
           {step === 'customize' && state.image && (
-            <PhotoEditor 
-              image={state.image} 
-              teams={TEAMS.filter(t => t.leagueId === state.league?.id)} 
-              selectedTeam={state.team} 
-              onTeamSelect={(t) => setState(p => ({ ...p, team: t }))} 
-              number={state.number} 
-              onNumberChange={(n) => setState(p => ({ ...p, number: n }))} 
-              removeBackground={state.removeBackground} 
-              onToggleBackground={() => setState(p => ({ ...p, removeBackground: !p.removeBackground }))} 
-              onSwap={handleSwap} 
-              isProcessing={isLoading} 
+            <PhotoEditor
+              image={state.image}
+              teams={filteredTeams}
+              selectedTeam={state.team}
+              onTeamSelect={(t) => setState(p => ({ ...p, team: t }))}
+              number={state.number}
+              onNumberChange={(n) => setState(p => ({ ...p, number: n }))}
+              removeBackground={state.removeBackground}
+              onToggleBackground={() => setState(p => ({ ...p, removeBackground: !p.removeBackground }))}
+              onSwap={handleSwap}
+              isProcessing={isLoading}
             />
           )}
 
           {step === 'processing' && (
-            <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black">
-              <h2 className="font-oswald italic font-black text-[8rem] uppercase tracking-ultra text-[#ccff00] animate-pulse">SYNTHESIZING</h2>
+            <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center bg-black px-4">
+              <h2 className="font-oswald italic font-black text-4xl sm:text-6xl md:text-7xl lg:text-[8rem] uppercase tracking-ultra text-[#ccff00] animate-pulse text-center">SYNTHESIZING</h2>
+              <p className="font-oswald italic text-sm sm:text-base text-zinc-600 uppercase font-bold mt-6 text-center">AI processing your jersey swap...</p>
             </div>
           )}
 
           {step === 'result' && resultImage && (
-            <section className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-16 px-6 max-w-6xl mx-auto py-12">
-              <div className="w-full lg:w-[45%]">
-                <div className="aspect-[3/4] glass rounded-[3rem] overflow-hidden border border-white/20 shadow-2xl relative group">
+            <section className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-8 sm:gap-12 lg:gap-16 px-4 sm:px-6 max-w-6xl mx-auto py-8 sm:py-12">
+              <div className="w-full lg:w-[45%] max-w-md lg:max-w-none">
+                <div className="aspect-[3/4] glass rounded-2xl sm:rounded-[3rem] overflow-hidden border border-white/20 shadow-2xl relative group">
                   <img src={resultImage} className="w-full h-full object-cover" alt="Result" />
-                  <button onClick={() => { const link = document.createElement('a'); link.href = resultImage; link.download = 'jersey-swap.png'; link.click(); }} className="absolute bottom-6 right-6 w-14 h-14 bg-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all hover:bg-[#ccff00] hover:text-black" >
-                    <Download className="w-6 h-6" />
+                  <button onClick={() => { const link = document.createElement('a'); link.href = resultImage; link.download = 'jersey-swap.png'; link.click(); }} className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all hover:bg-[#ccff00] hover:text-black active:scale-90" >
+                    <Download className="w-5 h-5 sm:w-6 sm:h-6" />
                   </button>
                 </div>
               </div>
-              <div className="flex-1 text-center lg:text-left space-y-6">
-                <h3 className="font-oswald italic font-black text-7xl leading-none uppercase tracking-ultra">NEW_ERA<br /><span className="text-[#ccff00]">{state.team?.name.split(' ').pop()}</span></h3>
-                <div className="flex flex-col gap-4">
-                  <button onClick={() => setShowPlayerCard(true)} className="py-5 bg-white text-black font-oswald italic font-black text-2xl rounded-2xl hover:bg-[#ccff00] transition-all uppercase">VIEW_CARD</button>
-                  <button onClick={reset} className="py-5 glass text-white border border-white/10 font-oswald italic font-black text-2xl rounded-2xl hover:bg-white/5 transition-all uppercase">REMIX</button>
+              <div className="flex-1 text-center lg:text-left space-y-4 sm:space-y-6">
+                <h3 className="font-oswald italic font-black text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-none uppercase tracking-ultra">NEW_ERA<br /><span className="text-[#ccff00]">{state.team?.name.split(' ').pop()}</span></h3>
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  <button onClick={() => setShowPlayerCard(true)} className="py-4 sm:py-5 bg-white text-black font-oswald italic font-black text-lg sm:text-xl md:text-2xl rounded-xl sm:rounded-2xl hover:bg-[#ccff00] active:scale-95 transition-all uppercase">VIEW_CARD</button>
+                  <button onClick={reset} className="py-4 sm:py-5 glass text-white border border-white/10 font-oswald italic font-black text-lg sm:text-xl md:text-2xl rounded-xl sm:rounded-2xl hover:bg-white/5 active:scale-95 transition-all uppercase">REMIX</button>
                 </div>
               </div>
             </section>
@@ -423,12 +523,12 @@ const App: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      <footer className="fixed bottom-0 inset-x-0 z-[100] bg-black/50 backdrop-blur-2xl border-t border-white/5 px-8 py-4 flex justify-between items-center">
-        <div className="flex gap-8">
-          <button onClick={() => setStep('profile')} className="font-oswald italic font-black text-[10px] tracking-widest text-zinc-500 hover:text-white uppercase">VAULT</button>
-          <button onClick={() => { setActiveProfile(null); localStorage.removeItem(SESSION_KEY); setStep('auth'); }} className="font-oswald italic font-black text-[10px] tracking-widest text-zinc-500 hover:text-red-500 uppercase">SIGN_OUT</button>
+      <footer className="fixed bottom-0 inset-x-0 z-[100] bg-black/50 backdrop-blur-2xl border-t border-white/5 px-4 sm:px-8 py-3 sm:py-4 flex justify-between items-center">
+        <div className="flex gap-4 sm:gap-8">
+          <button onClick={() => setStep('profile')} className="font-oswald italic font-black text-[10px] sm:text-[11px] tracking-widest text-zinc-500 hover:text-white uppercase active:text-[#ccff00] transition-colors">VAULT</button>
+          <button onClick={() => { setActiveProfile(null); localStorage.removeItem(SESSION_KEY); setStep('auth'); }} className="font-oswald italic font-black text-[10px] sm:text-[11px] tracking-widest text-zinc-500 hover:text-red-500 uppercase active:text-red-400 transition-colors">SIGN_OUT</button>
         </div>
-        <span className="font-oswald italic font-black text-[9px] text-zinc-700">© 2026 JERSEYSWAP.IO</span>
+        <span className="font-oswald italic font-black text-[8px] sm:text-[9px] text-zinc-700 hidden sm:inline">© 2026 JERSEYSWAP.IO</span>
       </footer>
 
       {showPlayerCard && resultImage && playerData && activeProfile && (
